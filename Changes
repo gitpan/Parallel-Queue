@@ -1,0 +1,7 @@
+Revision history for Perl extension Parallel::Queue.
+Most recent at top.
+
+Fri Mar 10 18:02:39 EST 2006
+
+- Initial public release, basd on the guts of 
+  Schedule::Parallel.
