@@ -6,16 +6,18 @@
 use strict;
 use FindBin::libs;
 
-use Test::More qw( tests 1 );
+use Test::More qw( tests 3 );
 
 use Parallel::Queue;
 
 ########################################################################
-# process creates and removes some files in parallel.
+# create and drop a large  list of files in 
+# interleaved groups of three. If the queue is dropping jobs 
+# then this should show it.
 
 my $tmp = "./$$";
 
-my @filz = map { "$tmp/$_" } ( 'aaa' .. 'zzz' );
+my @filz = map { "$tmp/$_" } ( 'aa' .. 'zz' );
 
 # cleanup may fail on the way in.
 
@@ -32,8 +34,9 @@ sub frobnicate
 {
     -e $_[0]
     ? unlink $_[0]
-    : open my $fh, '>', $_[0]
+    : open my $fh, '>', $_[0];
 
+    0
 }
 
 my @queue = map { my $a = $_ ; sub{ frobnicate $a } } @filz[0..2];
@@ -57,15 +60,16 @@ for( 1 .. 2 * $i - 3 )
     splice @filz, 0, 3;
 }
 
-print 'Jobs: ', scalar @queue, "\n";
+for my $i ( 0, 1, 8 )
+{
+    Parallel::Queue->runqueue( 8, @queue );
 
-Parallel::Queue->runqueue( 0, @queue );
+    my $count = scalar ( my @a = glob "$tmp/*" );
 
-my $count = scalar ( my @a = glob "$tmp/*" );
+    print "Leftover files: $count\n" if $count;
 
-print "Leftover files: $count\n";
-
-ok( $count == 0, "Files created and destroyed" );
+    ok( $count == 0, "Pass $i: No leftover files" );
+}
 
 ########################################################################
 # cleanup on the way out

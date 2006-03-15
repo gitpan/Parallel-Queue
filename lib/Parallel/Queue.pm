@@ -1,3 +1,6 @@
+########################################################################
+# housekeeping
+########################################################################
 
 package Parallel::Queue;
 
@@ -7,14 +10,17 @@ use Symbol;
 use Config;
 use Scalar::Util qw( looks_like_number );
 
-our $VERSION = '0.01';
+########################################################################
+# package variables
+########################################################################
 
-# default parallel behavior is fork, see 
-# hashargs.
+our $VERSION = '0.03';
+
+# default parallel behavior of forking is 
+# handled via $arghash.
 
 my %defaultz =
 (
-
     fork    => 0,
     thread  => 0,
 
@@ -24,7 +30,7 @@ my %defaultz =
 
 # per-package config values.
 
-my %config = ();
+my %configz = ();
 
 # populated via local value if threading is enabled.
 
@@ -43,8 +49,10 @@ my %handlerz
     # $proc_loop 
     ####################################################################
 
-    my $verbose = 0;
-    my $debug   = 0;
+    my $verbose     = 0;
+    my $debug       = 0;
+
+    my $semaphore   = '';
 
     my $setup 
     = sub
@@ -53,6 +61,11 @@ my %handlerz
 
         $verbose = $argz->{ verbose };
         $debug   = $argz->{ debug };
+
+        # hand back the count, leaving the queue on 
+        # the stack by itself.
+
+        shift
     };
 
     my $fork_proc
@@ -92,7 +105,7 @@ my %handlerz
         }
     };
 
-    my $proc_loop
+    my $fork_loop
     = sub
     {
         # block in wait for a process to exit
@@ -102,7 +115,14 @@ my %handlerz
 
         eval
         {
-            print STDERR "Waiting..."
+            my $count = &$setup;
+
+            print STDERR "Forking initial $count proc\n"
+            if $verbose;
+
+            &$fork_proc for (1..$count);
+
+            print STDERR "Looping remainder of list...\n"
             if $verbose;
 
             while( (my $pid = wait) > 0 )
@@ -146,45 +166,6 @@ my %handlerz
     # thread handlers.
     ####################################################################
 
-    my $split_thread 
-    = sub
-    {
-        # block here to avoid creating the thread
-        # until it is runnable. this leaves the 
-        # stack intact until the job can be started
-        # in case the queue manager aborts.
-
-        $semaphore->down;
-
-        my $run = $_[0]
-        or die "Bogus threadify: missing job to run";
-
-        # since the threads are detached they will have
-        # to up the semaphore for themselves.
-
-        my $job = 
-        sub
-        {
-            $run->();
-
-            $semaphore->up;
-        };
-
-        if( my $thread = Threads->new($job) )
-        {
-            $thread->detach;
-        }
-        else
-        {
-            die "Threadaphobia: $!";
-        }
-
-        # now that the job has been started, drop it
-        # off of the queue.
-
-        shift;
-    };
-
     # split_thread blocks on the semaphore, so all the
     # thread loop has to do at this point is dispatch a
     # new copy of split_thread each time the splitter
@@ -193,12 +174,41 @@ my %handlerz
     # at some point either @_ is exhausted or split_thread
     # dies.
 
-    my $thread_loop
+    my $threadly 
     = sub
     {
-        eval { &$split_thread while @_ };
+        my $count = &$setup;
 
-        @_
+        my $semaphore = Thread::Semaphore->new( $count );
+
+        while( @_ )
+        {
+            $semaphore->down;
+
+            my $sub = $_[0];
+            my $job
+            = sub
+            {
+                eval { $sub->() };
+
+                $semaphore->up;
+            };
+
+            if( my $thread = Threads->new($job) )
+            {
+                $thread->detach;
+
+                shift;
+            }
+            else
+            {
+                die "Threadaphobia: $!";
+            }
+        }
+
+        # wait for the last remaining jobs to finish.
+
+        $semaphore->down( $count );
     };
 
     ####################################################################
@@ -206,70 +216,59 @@ my %handlerz
     ####################################################################
 
     (
-        fork =>
-        {
-            init    => $setup,
-            job     => $fork_proc,
-            loop    => $proc_loop,
-        },
+        fork    => $fork_loop,
 
-        thread =>
-        {
-            init    => $setup,
-            job     => $split_thread,
-            loop    => $thread_loop,
-        },
+        thread  => $threadly,
     )
 };
 
 ########################################################################
-# push the runqueue sub into the caller's
-# namespace.
+# import and construct both depend on $arghash to validate the config
+# values, set the defaults, and remember previous values (via %configz).
 #
-# discard this pacakge, grab the arg's from 
-# whatever's left.
+# this is also where the runqueue sub is pushed out to the caller's
+# space if requested.
 #
-# args are stored per packge: multiple "use"
-# statements can set separate arguments.
+# OO Interface allows creating separate queue managers with 
+# pre-chosen thread/fork behavior and count of jobs to run.
 #
-# notice that the OO and functional interfaces
-# use differing versions of the code available
-# as "runqueue" to the caller.
+# passing arguments to use allows setting per-package default
+# values for the objects.
 
 my $arghash 
 = sub
 {
     my $caller  = shift;
 
+    my $defz    = $configz{ $caller } || \%defaultz;
+
     my %argz    = ();
 
-    my %tmp     = ( %defaultz, map { $_ => 1 } @_ );
+    my %tmp     = ( %$defz, map { $_ => 1 } @_ );
 
     my $install = 'runqueue';
 
     # regex allows matching with or without a 
     # sigil on the subname.
     #
-    # checking for a valid caller allows short-
-    # circuting this for OO calls.
+    # note that this can end up installing 
+    # runqueue for OO modules that call the
+    # constructor with a 'runqueue' argument.
 
     if( my ($subkey) = grep /$install/o, keys %tmp )
     {
         delete $tmp{ $subkey };
 
-        if( $caller )
-        {
-            my $ref = qualify_to_ref $install, $caller; 
+        my $ref = qualify_to_ref $install, $caller; 
 
-            *$ref = __PACKAGE__->can( $install );
-        }
+        *$ref = __PACKAGE__->can( $install );
     }
 
     $tmp{ debug } ||= 1 if $^P;
 
     # default is to fork.
 
-    $tmp{ fork } = 1 unless $tmp{ thread };
+    $tmp{ fork } ||= ! $tmp{ thread };
 
     @argz{ keys %defaultz } = delete @tmp{ keys %defaultz };
 
@@ -281,11 +280,19 @@ my $arghash
 
     if( $argz{ thread } )
     {
+        # sanity check version, ithreads, and 
+        # sempaphore module only if threads are
+        # used.
+
         croak 'Bogus Parallel::Queue: ithreads not available'
         unless $Config{useithreads};
 
+        require 5.8.0;
+
         require Thread::Semaphore;
     }
+
+    # at this point the arguments seem usable.
 
     \%argz
 };
@@ -293,11 +300,7 @@ my $arghash
 sub import
 {
     # discard the current package name and deal 
-    # with the args. passing in unknown arguments
-    # is fatal.
-    #
-    # if the next argument is "runqueue" (with
-    # or without a sigil) then install it.
+    # with the args.
 
     my $caller = caller;
 
@@ -311,28 +314,36 @@ sub import
     # defined, but most people don't want to modify their
     # code to have a 'debug => 0' in order to debug it.
 
-    $config{ $caller } = &$arghash;
+    $configz{ $caller } = &$arghash;
 }
-
-####################################################################
-# aside from the process of extracting arguments for the queue,
-# functional and OO code are identical: pass the arg's and job
-# count here along with the queue to run.
-#
-# OO Interface allows creating separate queue managers with 
-# pre-chosen thread/fork behavior and count of jobs to run.
 
 sub construct
 {
-    my $proto = splice @_, 0, 1, '';
+    # the first argument means something here: it's
+    # the class prototype (via name or ref). 
+
+    my $caller = caller;
+
+    my $proto = splice @_, 0, 1, $caller;
 
     my $argz = &$arghash;
 
     bless sub { $argz }, ref $proto || $proto
 }
 
+####################################################################
+# top half of the execution engine. this validates the arguments,
+# locates the fork/thread handler, and dispatches it.
+#
+# the work to determine $argz comes from this being called as
+# both a function (count first) or object (class/object first).
+#
+# after the config arguments have been extracted and the count
+# is first on the stack, execution is identical for functinal 
+# and OO execution.
+
 sub runqueue
-{
+{ 
     # two ways in here: calling a class method or 
     # using an installed runqueue.
 
@@ -356,7 +367,7 @@ sub runqueue
             # leading number gets its config from the 
             # use arguments.
 
-            $config{ $caller }
+            $configz{ $caller }
             or die "Bogus runqueue: import bypassed, no config for '$caller'";
         } 
         else
@@ -371,80 +382,66 @@ sub runqueue
 
             ref $item
             ? $item->()
-            : { %defaultz }
+            : $arghash->('')
         }
     };
 
-    # what is left on the stack at this point are the 
-    # job count and jobs to run.
-
-    my $count = shift;
-    
-    $count >= 0
-    or croak "Bogus runqueue: count must be >= 0";
-
-    my $debug   = $argz->{ debug };
-
-    if( $count == 0 )
-    {
-        # run the jobs single-stream, mainly to avoid 
-        # issues debugging fork/thread.
-        #
-        # setting a breakpoint at the $_->() line 
-
-        for( @_ )
-        {
-            $DB::single = 1
-            if $debug;
-
-            $_->()
-        }
-    }
-    elsif( $count > 0 )
-    {
-        # whatever's left on the arg list is the queue...
-        # now to massage the arg's for handling the current
-        # queue's execution.
-
-        $DB::single = 1 if $argz->{ debug };
-
-        local $semaphore = Thread::Semaphore->new( $count )
-        if $argz->{ thread };
-
-        my $mode = $argz->{ fork } ? 'fork' : 'thread';
-
-        my ( $setup, $dispatch, $waitloop )
-        = @{ $handlerz{ $mode } }{ qw( init job loop ) }
-        or croak "Bogus mode: no dispatcher for '$argz->{mode}'";
-
-        # start the queue by dispatching the first count items
-        # then call the loop to finish the argument list.
-
-        eval
-        {
-            $setup->( $argz );
-
-            &$dispatch for 1..$count;
-
-            # caller gets back whatever portion of the queue was 
-            # passed back by the looping operator.
-
-            &$waitloop
-        };
-    }
-    else
-    {
-        croak "Bogus runqueue: invalid job count: '$count' should be >= 0";
-    }
-
-    # caller gets back false if all of the jobs
-    # were dispatched.
+    my $debug = $argz->{ debug };
 
     $DB::single = 1 if $debug;
 
-    @_
-}
+    # the stack is now a job count followed by the
+    # coderef's to dispatch.
 
+    my $count = $_[0];
+
+    looks_like_number $count
+    or croak "Bogus job count: '$_[0]' does not look like a number";
+    
+    $count >= 0
+    or croak "Bogus runqueue: '$count' < 0";
+
+    $DB::single = 1 if $debug;
+
+    if( $count )
+    {
+        my $mode = $argz->{ fork } ? 'fork' : 'thread';
+
+        if( my $handler = $handlerz{ $mode } )
+        {
+            # prefix the stack with the arguments and 
+            # descend into hell... er, the bottom half.
+
+            splice @_, 0, 0, $argz;
+
+            goto &$handler;
+
+            die "Roadkill: Failed dispatching '$handler' for '$mode': $!"
+        }
+        else
+        {
+            croak "Bogus mode: no dispatcher for '$mode'";
+        }
+    }
+    else
+    {
+        # count of zero doesn't split off anything, mainly
+        # for debugging the code single-stream.
+
+        shift;
+
+        while( my $sub = shift @_ )
+        {
+            last if $sub->()
+        }
+
+        @_
+    }
+
+    # normal execution never gets this far since it enters
+    # the handler via goto; single stream shouldn't need any
+    # followup.
+}
 
 # keep require happy
 
@@ -458,16 +455,11 @@ Parallel::Queue - fork or thread a list of closures N-way parallel
 
 =head1 SYNOPSIS
 
-    # use the OO interface with separate configuration
-    # data for each queue manager (notice the lack of
-    # 'runqueue').
-
-    use Parallel::Queue qw( verbose debug );
-
-    # only squish files larger than 8KB in size.
-    # figure that the system can handle four copies
-    # of squish running at the same time without 
-    # them interfering with one another.
+    # example queue:
+    # only squish files larger than 8KB in size.  figure
+    # that the system can handle four copies of squish
+    # running at the same time without them interfering
+    # with one another.
 
     my @queue = map { -s > 8192 ? sub{ squish $_ } : () } @filz;
 
@@ -501,16 +493,30 @@ Parallel::Queue - fork or thread a list of closures N-way parallel
 
     require Parallel::Queue;
 
-    Parallel::Queue->runqueue( $count, @queue );
+    Parallel::Queue->runqueue( 4, @queue );
+
+    # pre-define defaults for the objects: leave
+    # out runqueue, set the rest, and construct 
+    # an object. the one here gets verbose, thread,
+    # and debug all set to true.
+
+    use Parallel::Queue qw( verbose thread );
+
+    my $quemgr = Parallel::Queue->construct( debug );
+
+    $quemgr->runqueue( 4, @queue );
+
 
 
 =head1 DESCRIPTION
 
-Given a count and an array of coderefs (most likely closures), 
-runqueue will run the jobs in parallel. The jobs can be run 
-via fork or (detached) threads. Jobs on the queue are executed
-until one of them exits non-zero, the fork/thread operation fails,
-or all of them are dispatched (i.e., the queue is empty).
+Given a count and an array of coderefs (most likely closures),
+runqueue will run the jobs in parallel. The jobs can
+be run via fork or detached threads [see known issues
+for threading].  Jobs on the queue are executed until
+one of them exits non-zero, the fork/thread operation
+fails, or all of them are dispatched (i.e., the queue
+is empty).
 
 =head2 Functional
 
@@ -565,6 +571,24 @@ this is the equivalent of using:
 but may be easier in cases where the module is being included
 at runtime (usually via require).
 
+=head3 Constructor defaults via use.
+
+Arguments passed to use are installed as defaults for
+the calling class. This allows a class to determine 
+defaults for the objects created, which can be useful
+for reducing the amount of data thrown around in the 
+construction.
+
+    # default has verbose turned on.
+
+    use Parallel::Queue qw( verbose );
+
+    ...
+
+    # gets verbose and fork turned on.
+
+    my $quemgr = Parallel::Queue->construct( fork ); 
+
 
 =head1 KNOWN ISSUES
 
@@ -582,6 +606,11 @@ overloading is used for the count then this could cause
 problems. This will show up as runqueue complaining that
 the first argument is not a Parallel::Queue (i.e., that
 $_[0]->isa( __PACKAGE__ ) is false).
+
+=item Threads are unstested.
+
+Forks work; threads are still in progress. The code 
+may work but I have not tested it yet.
 
 =back
 

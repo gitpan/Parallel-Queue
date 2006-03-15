@@ -9,7 +9,7 @@ use FindBin::libs;
 
 use Test::More qw( tests 7 );
 
-use Parallel::Queue qw( runqueue );
+use Parallel::Queue qw( runqueue debug );
 
 ########################################################################
 # first sanity check: was the 'runqueue' function installed?

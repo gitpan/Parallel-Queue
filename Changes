@@ -1,6 +1,21 @@
 Revision history for Perl extension Parallel::Queue.
 Most recent at top.
 
+Wed Mar 15 13:16:04 EST 2006
+
+- Added failure mode tests
+
+- Use arghash to get defaults in class method call (bug).
+
+
+Tue Mar 14 18:13:43 EST 2006
+
+- Replace separate fork and loop with a single 
+  handler per mode (not externally visible).
+
+- POD.
+
+
 Fri Mar 10 18:02:39 EST 2006
 
 - Initial public release, basd on the guts of 
