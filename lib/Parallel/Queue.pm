@@ -14,7 +14,7 @@ use Scalar::Util qw( looks_like_number );
 # package variables
 ########################################################################
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 # default parallel behavior of forking is 
 # handled via $arghash.
@@ -506,6 +506,17 @@ Parallel::Queue - fork or thread a list of closures N-way parallel
 
     $quemgr->runqueue( 4, @queue );
 
+    # avoid forking with a zero job count.
+    # this dispatches the closures one by one
+    # via $sub->() for easier debugging.
+    #
+    # this mode is also used regardless of 
+    # the job count if $^P is set (i.e., 
+    # if the que is run through the debugger).
+
+    runqueue 0, @queue;
+
+    $quemgr->runqueue( 0, @queue );
 
 
 =head1 DESCRIPTION
