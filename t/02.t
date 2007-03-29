@@ -5,9 +5,8 @@
 ########################################################################
 
 use strict;
-use FindBin::libs;
 
-use Test::More qw( tests 7 );
+use Test::More qw( tests 13 );
 
 use Parallel::Queue qw( runqueue debug );
 
@@ -54,17 +53,21 @@ eval { unlink @filz };
 
 for my $i ( 0, 1, 4 )
 {
-    runqueue $i, @pass_1;
+    my @pass1_return = runqueue $i, @pass_1;
+
+    ok ! @pass1_return, "Pass 1 jobs consumed";
 
     my $result_1 = grep { -e } @filz;
 
-    runqueue $i, @pass_2;
+    my @pass2_return = runqueue $i, @pass_2;
+
+    ok ! @pass2_return, "Pass 1 jobs consumed";
 
     my $result_2 = grep { -e } @filz;
 
-    ok( $result_1 == @filz  , "Pass $i files created" );
+    ok $result_1 == @filz  , "Pass $i files created";
 
-    ok( $result_2 == 0      , "Pass $i files deleted" );
+    ok $result_2 == 0      , "Pass $i files deleted";
 }
 
 ########################################################################

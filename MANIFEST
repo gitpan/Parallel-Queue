@@ -1,6 +1,5 @@
 lib/Parallel/Queue.pm
 MANIFEST
-META.yml
 Changes
 Makefile.PL
 t/01.t
@@ -8,3 +7,4 @@ t/02.t
 t/03.t
 t/04.t
 t/05.t
+META.yml                                 Module meta-data (added by MakeMaker)

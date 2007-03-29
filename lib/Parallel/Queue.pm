@@ -14,7 +14,7 @@ use Scalar::Util qw( looks_like_number );
 # package variables
 ########################################################################
 
-our $VERSION = '0.04';
+our $VERSION = '0.03';
 
 # default parallel behavior of forking is 
 # handled via $arghash.
@@ -75,8 +75,6 @@ my %handlerz
 
         if( (my $pid = fork()) > 0 )
         {
-            # parent has to clean the item off of the stack
-
             print STDERR "fork: $pid\n"
             if $verbose;
 
@@ -472,9 +470,9 @@ Parallel::Queue - fork or thread a list of closures N-way parallel
 
     use Parallel::Queue qw( runqueue verbose fork );
 
-    runqueue 4, @queue;
+    my @remaining = runqueue 4, @queue;
 
-    die "Incomplete jobs" if @queue;
+    die "Incomplete jobs" if @remaining;
 
     # OO: generate queue manager and use without the 
     # 'runqueue' arguments, construct a queue manager,
@@ -504,20 +502,7 @@ Parallel::Queue - fork or thread a list of closures N-way parallel
 
     my $quemgr = Parallel::Queue->construct( debug );
 
-    $quemgr->runqueue( 4, @queue );
-
-    # avoid forking with a zero job count.
-    # this dispatches the closures one by one
-    # via $sub->() for easier debugging.
-    #
-    # this mode is also used regardless of 
-    # the job count if $^P is set (i.e., 
-    # if the que is run through the debugger).
-
-    runqueue 0, @queue;
-
-    $quemgr->runqueue( 0, @queue );
-
+    my @remaining = $quemgr->runqueue( 4, @queue );
 
 =head1 DESCRIPTION
 
@@ -543,7 +528,12 @@ and get different behavior).
 
     use Parallel::Queue qw( runqueue verbose );
 
-    runqueue 8, @queue;
+    my @un_run = runqueue 8, @queue;
+
+    # at this point @un_run is the un-executed
+    # portion of the queue. this can be used as
+    # a sanity check or to execute the jobs if
+    # the situation is correctable.
 
 =head2 Objective
 
@@ -563,15 +553,14 @@ like fork vs. thread decisions into runtime code:
 
     my $que_mgr = Parallel::Queue->construct( $how, $verbose );
 
-    $que_mgr->runqueue( 8, @queue );
+    my @un_run = $que_mgr->runqueue( 8, @queue );
 
 If runqueue is called as a class method then it will
 run with the default configuration: forking quietly.
 
     require Parallel::Queue;
 
-    Parallel::Queue->runqueue( 8, @queue );
-
+    my @un_run = Parallel::Queue->runqueue( 8, @queue );
 
 this is the equivalent of using:
 
