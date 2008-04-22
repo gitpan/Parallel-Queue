@@ -8,17 +8,33 @@ use strict;
 
 use Test::More qw( tests 13 );
 
-use Parallel::Queue qw( runqueue debug );
+use Parallel::Queue qw( debug );
 
 ########################################################################
 # first sanity check: was the 'runqueue' function installed?
 
-ok( __PACKAGE__->can( 'runqueue' ), 'runqueue installed' );
+ok __PACKAGE__->can( 'runqueue' ), 'runqueue installed';
 
 ########################################################################
 # process creates and removes some files in parallel.
 
-my $tmp = "./$$";
+my $tmp
+= do
+{
+    my $t   = '.';
+
+    for( 'tmp', $$ )
+    {
+        $t .= "/$_";
+
+        -d $t || mkdir $t, 0777
+        or die "Unable to mkdir $t: $!";
+    }
+
+    eval { unlink glob "$t/*" };
+
+    $t
+};
 
 my @filz = map { "$tmp/$_" } ( 'aa' .. 'at' );
 

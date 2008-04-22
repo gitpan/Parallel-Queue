@@ -4,67 +4,37 @@
 
 use strict;
 
-use Test::More qw( tests 3 );
+use Test::More qw( tests 4 );
 
-use Parallel::Queue qw( runqueue );
+use Parallel::Queue qw( verbose );
 
-my $pass_1
-= do
-{
-    my @queue =
-    (
-        sub { 0 },
-        sub { 0 },
+# depending on intra-job timing, there may be 
+# one or two items left in @pass1 after the 
+# queue is run once.
 
-        sub { 1 },  # non-zero exit == failure.
+my @queue =
+(
+    sub {  0 },
+    sub {  0 },
 
-        sub { 0 },
-        sub { 0 },
-    );
+    sub {  1 },  # non-zero exit == failure.
 
-    # there isn't any good way to test this with more
-    # than one job running due to logic races at the 
-    # O/S level.
+    sub {  0 },  # these two are left on @pass1
+    sub {  0 },
+);
 
-    runqueue 1, @queue;
-};
 
-ok( 2 == $pass_1, 'Two jobs left over' );
+my @pass1   = runqueue 1, @queue;
 
-my @pass_2
-= do
-{
-    # the spin loop allows anyone watching via, say,
-    # top to see that the processes are actually being
-    # forked...
+my $count   = @pass1;
 
-    my $sub
-    = sub
-    {
-        my $i = $_ + 1 for (1..1_000_000);
+ok $count, "Two ($count) jobs remaining?";
 
-        0
-    };
+ok $queue[-1] == $pass1[-1], 'Expected job unused';
+ok $queue[-2] == $pass1[-2], 'Expected job unused';
 
-    my @queue =
-    (
-        ( $sub ) x 20,
+my @pass2 = runqueue 8, @pass1;
 
-        sub { 1 },  # non-zero exit == failure.
-
-        ( $sub ) x 20,
-    );
-
-    # can't tell in advance how many jobs are incomplete
-    # but there should be at least some of them...
-
-    runqueue 8, @queue
-};
-
-ok( @pass_2, "Parallel jobs remaining after failure" );
-
-my @pass_3 = runqueue 8, @pass_2;
-
-ok( ! @pass_3, "Remaining pass-2 jobs completed" );
+ok ! @pass2, "Remaining jobs completed";
 
 __END__

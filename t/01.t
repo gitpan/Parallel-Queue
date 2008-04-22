@@ -4,12 +4,14 @@
 
 use strict;
 
+my $package = 'Parallel::Queue';
+
 use Test::More qw( tests 2 );
 
-use_ok( 'Parallel::Queue' );
+use_ok $package;
 
-my $version = Parallel::Queue->VERSION;
+my $version = $package->VERSION;
 
-ok( $version, 'Parallel::Queue::VERSION' );
+ok $version , "$package version $version";
 
 __END__

@@ -5,74 +5,83 @@
 
 use strict;
 
-use Test::More qw( tests 3 );
+use Test::More;
 
 use Parallel::Queue;
 
 ########################################################################
-# create and drop a large  list of files in 
-# interleaved groups of three. If the queue is dropping jobs 
-# then this should show it.
-
-my $tmp = "./$$";
-
-my @filz = map { "$tmp/$_" } ( 'aa' .. 'zz' );
+# create and drop a list of files. if any jobs are being dropped
+# out of the queue then it'll show up here.
 
 # cleanup may fail on the way in.
 
--d $tmp || mkdir $tmp, 0700
-or die "Roadkill: $tmp: $!";
-
-eval { unlink glob "$tmp/*" };
-
-# create a few files, then a few more, then delete the
-# first group, then create more, then delete... this 
-# is a decent test of whether the queue is dropping jobs.
-
-sub frobnicate
+my $tmp
+= do
 {
-    -e $_[0]
-    ? unlink $_[0]
-    : open my $fh, '>', $_[0];
+    my $t   = '.';
 
-    0
-}
+    for( 'tmp', $$ )
+    {
+        $t .= "/$_";
 
-my @queue = map { my $a = $_ ; sub{ frobnicate $a } } @filz[0..2];
+        -d $t || mkdir $t, 0777
+        or die "Unable to mkdir $t: $!";
+    }
 
-my $i = @filz;
+    eval { unlink glob "$t/*" };
 
-for( 1 .. 2 * $i - 3 )
+    $t
+};
+
+my $create  = sub { !( open my $fh, '>', $_[0]  ) };
+my $remove  = sub { !( unlink $_[0]             ) };
+
+sub gen_queue
 {
-    push @queue,
+    my $sub     = shift;
+
+    my $base    = 'z';
+
     map
     {
-        my $b = $_;
-        sub { frobnicate $b }
-    }
-    grep
-    {
-        defined
-    }
-    @filz[3..5,0..2];
+        my $file  = $_->[1];
 
-    splice @filz, 0, 3;
+        sub { $sub->( $file ) }
+    }
+    sort
+    {
+        $a->[0] <=> $b->[0]
+    }
+    map
+    {
+        [ int rand 100, ++$base ]
+    }
+    ( 1 .. 20 )
 }
 
-for my $i ( 0, 1, 8 )
+my @countz  = ( 0, 1, 8, 100 );
+
+plan tests => scalar @countz;
+
+for my $count ( @countz )
 {
-    Parallel::Queue->runqueue( 8, @queue );
+    print "Pass: $count\n";
 
-    my $count = scalar ( my @a = glob "$tmp/*" );
+    for( $create, $remove )
+    {
+        my @queue   = gen_queue $_; 
 
-    print "Leftover files: $count\n" if $count;
+        runqueue $count, @queue;
+    }
 
-    ok( $count == 0, "Pass $i: No leftover files" );
+    my $found   = glob "$tmp/*";
+
+    ok ! $found, "Pass $count: No leftover files";
 }
 
 ########################################################################
 # cleanup on the way out
 
-eval { rmdir $tmp };
+eval { rmdir "./tmp/$$"; rmdir './tmp'; };
 
 __END__
