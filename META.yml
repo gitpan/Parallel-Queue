@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Parallel-Queue
-version:             2.00
+version:             2.01
 abstract:            fork list of subref's N-way parallel
 license:             ~
 author:              

@@ -1,6 +1,17 @@
 Revision history for Perl extension Parallel::Queue.
 Most recent at top.
 
+2.01 Tue Apr 22 14:45:30 EDT 2008
+
+- The threads weren't being used by anyone so they
+  have been removed.
+
+- added "finish" option to ignore nonzero exits.
+
+- debug=0 will now override finding the perl debugger,
+  allowing debugging of forked proc's (with appropriate
+  use of terminal handlers).
+
 Wed Mar 15 13:16:04 EST 2006
 
 - Added failure mode tests
@@ -18,5 +29,5 @@ Tue Mar 14 18:13:43 EST 2006
 
 Fri Mar 10 18:02:39 EST 2006
 
-- Initial public release, basd on the guts of 
+- Initial public release, based on the guts of 
   Schedule::Parallel.
