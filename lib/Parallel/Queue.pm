@@ -184,8 +184,6 @@ sub runqueue
 
 sub import
 {
-    $DB::single = 1;
-
     # discard the current package name and deal 
     # with the args. empty arg for 'export' 
     # indicates that runqueue needs to be exported.
