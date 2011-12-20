@@ -79,10 +79,15 @@ sub fork_proc
         print STDERR "\tExecuting: $$\n"
         if $verbose;
 
-        # failing to exit here will cause a runaway
-        # if jobs are forked.
+        eval { exit $_[0]->() };
 
-        exit $_[0]->()
+        # if the call succeeds then we never get this
+        # far: the exit succeeded; if not then publish
+        # the failure and flag job to the parent.
+
+        print STDERR "\nFailed task: $@\n";
+
+        exit -1
     }
     else
     {
@@ -114,7 +119,9 @@ sub fork_queue
 
     while( (my $pid = wait) > 0 )
     {
-        print STDERR "exit: $pid ($?)\n"
+        my $status  = $?;
+
+        print STDERR "exit: $pid ($status)\n"
         if $verbose;
 
         # this assumes normal *NIX 16-bit exit values,
@@ -125,14 +132,14 @@ sub fork_queue
         #
         # caller can trap the signals.
 
-        if( $? )
+        if( $status )
         {
             # bad news, boss...
 
             my $message
             = do
             {
-                if( my $exit = $? >> 8 )
+                if( my $exit = $status >> 8 )
                 {
                     "exit( $exit ) by $pid"
                 }
@@ -150,10 +157,7 @@ sub fork_queue
 
         # kick off another job if the queue is not empty.
 
-        my $sub = shift
-        or next;
-
-        fork_proc $sub;
+        @_ and fork_proc shift;
     }
 
     return
@@ -228,9 +232,7 @@ sub import
     {
         my $ref = qualify_to_ref $export, $caller;
 
-        undef &{ *$ref };
-
-        *$ref   = \&runqueue
+        *$ref   = __PACKAGE__->can( 'runqueue' );
     }
 
     return

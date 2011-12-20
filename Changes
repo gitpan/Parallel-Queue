@@ -1,6 +1,15 @@
 Revision history for Perl extension Parallel::Queue.
 Most recent at top.
 
+2.04 Wed Aug 17 12:15:34 CDT 2011
+
+- Fix bug in import.
+
+2.02 Tue Aug 16 10:37:23 CDT 2011
+
+- avoid undef of installed handler: having the
+  warning is useful in enough cases.
+
 2.01 Tue Apr 22 14:45:30 EDT 2008
 
 - The threads weren't being used by anyone so they
