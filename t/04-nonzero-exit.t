@@ -2,11 +2,12 @@
 # test job failure
 ########################################################################
 
+use v5.10;
 use strict;
 
-use Test::More qw( tests 4 );
+use Test::More;
 
-use Parallel::Queue qw( verbose );
+use Parallel::Queue;
 
 # depending on intra-job timing, there may be 
 # one or two items left in @pass1 after the 
@@ -36,5 +37,7 @@ ok $queue[-2] == $pass1[-2], 'Expected job unused';
 my @pass2 = runqueue 8, @pass1;
 
 ok ! @pass2, "Remaining jobs completed";
+
+done_testing;
 
 __END__

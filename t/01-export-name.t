@@ -2,6 +2,7 @@
 # test exporting to non-standard name
 ########################################################################
 
+use v5.10;
 use strict;
 
 use Test::More qw( tests 2 );

@@ -1,14 +1,40 @@
 Revision history for Perl extension Parallel::Queue.
 Most recent at top.
 
-2.04 Wed Aug 17 12:15:34 CDT 2011
+3.00 Wed Jun  6 06:46:39 CDT 2012
 
-- Fix bug in import.
+ - Up version due to changes in interface.
 
-2.02 Tue Aug 16 10:37:23 CDT 2011
+ -  use v5.10.
 
-- avoid undef of installed handler: having the
-  warning is useful in enough cases.
+ -  Add the option for an iterator instead of a pre-
+    generated queue: items on the stack are checked
+    for $item->can( 'next_job' ). When true then
+    $item->next_job is called until it returns false,
+    at which point it is shifted off the queue and the
+    next item examined. This allows for both package
+    names and object to act as iterators.
+
+ -  Gracefully handles placeholders: false entries are
+    silently discarded, true non-iterator, non-coderef
+    items are printed. At the very least this allows for
+    progress messages between iterators or if-logic to 
+    insert empty items where the job should not be run.
+
+    Eventually the text items could be used for control
+    entries (e.g. switching verbosity or parallel count).
+
+ -  debug now turns off fork and also sets verbose.
+
+ -  "fork" (defaut true) turns on forking; "nofork" or 
+    "fork=0" turns off forking.
+
+ -  More complete tests with ore descriptive names.
+
+2.02 Fri Nov 25 09:18:02 CST 2011
+
+Fix one doc bug has been floating around the POD
+for some time.
 
 2.01 Tue Apr 22 14:45:30 EDT 2008
 

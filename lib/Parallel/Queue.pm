@@ -3,67 +3,144 @@
 ########################################################################
 
 package Parallel::Queue;
+use v5.10;
 
 use strict;
 
-use Carp            qw( croak               );
-use Scalar::Util    qw( looks_like_number   );
-use Symbol          qw( qualify_to_ref      );
+use Carp            qw( croak                       );
+use Scalar::Util    qw( blessed looks_like_number   );
+use Symbol          qw( qualify_to_ref              );
 
 ########################################################################
 # package variables
 ########################################################################
 
-our $VERSION    = '0.99';
+our $VERSION    = v3.00;
 
 # defaults.
 
-our $debug      = '';
-our $verbose    = '';
-our $finish     = '';
+my  $fork       = '';
+my  $verbose    = '';
+my  $finish     = '';
 
 ########################################################################
 # execution handlers
 ########################################################################
 
+sub next_job
+{
+    state $next = '';
+    my $job     = '';
+
+    JOB:
+    for(;;)
+    {
+        if( $next )
+        {
+            $job    = $next->( $_[0] )
+            and last;
+
+            say STDERR "Completed iterator: '$_[0]'"
+            if $verbose;
+
+            $next   = '';
+            shift;
+        }
+
+        @_ or last;
+
+        for my $item ( $_[0] )
+        {
+            if( $next = eval { $item->can( 'next_job' ) } )
+            {
+                say STDERR "New iterator: '$next' ($_[0])"
+                if $verbose;
+
+                next JOB
+            }
+            elsif( ref $item )
+            {
+                $job    = shift;
+            }
+            elsif( $item )
+            {
+                # these might end up being processing directives
+                # later on, for now ignore them.
+
+                say STDERR "Discarding non-queue '$item'";
+
+                shift
+            }
+            else
+            {
+                # silently ignore empty filler.
+
+                shift;
+            }
+        }
+
+        last if $job;
+    }
+
+    say STDERR "Next job: '$job'"
+    if $verbose;
+
+    $job
+    or return
+}
+
 sub run_nofork
 {
-    # discard the count, iterate the queue.  the 
-    # while loop allows returning the unused 
-    # portion as when forked.
+    # discard the count, iterate the queue without forking.
 
     shift;
 
-    while( @_ )
-    {
-        my $sub     = shift;
+    say STDERR "Non-forking queue"
+    if $verbose;
 
+    while( my $sub = &next_job )
+    {
         # these should all exit zero.
 
         my $result  = eval { $sub->() };
 
+        say STDERR "Complete: '$result' ($@)"
+        if $verbose;
+
         if( $result )
         {
-            print STDERR "Non-zero exit: $result, aborting queue";
+            say STDERR "Non-zero exit: $result, aborting queue";
 
             last
         }
         elsif( $@ )
         {
-            print STDERR "Error in job: $@";
+            say STDERR "Error in job: $@";
 
             last
         }
     }
 
-    return @_
+    return
 }
 
-sub fork_proc
+sub fork_job
 {
+    @_
+    or do
+    {
+        say STDERR "Queue empty."
+        if $verbose;
+
+        return
+    };
+
+    my $job = &next_job
+    or return;
+
     if( ( my $pid = fork ) > 0 )
     {
-        print STDERR "fork: $pid\n"
+        say STDERR "fork: $pid"
         if $verbose;
 
         # nothing useful to hand back.
@@ -75,19 +152,18 @@ sub fork_proc
         # child passes the exit status of the perl sub call
         # to the caller as our exit status. the O/S will deal
         # with signal values.
+        #
+        # aside: failing to exit here will cause runaway
+        # phorkatosis.
 
-        print STDERR "\tExecuting: $$\n"
+        say STDERR "\tExecuting: '$job'"
         if $verbose;
 
-        eval { exit $_[0]->() };
+        my $exitval = eval { $job->() };
 
-        # if the call succeeds then we never get this
-        # far: the exit succeeded; if not then publish
-        # the failure and flag job to the parent.
-
-        print STDERR "\nFailed task: $@\n";
-
-        exit -1
+        $@
+        ? die $@
+        : exit $exitval
     }
     else
     {
@@ -107,21 +183,14 @@ sub fork_queue
     # which may be none.
     # if so, we're done.
 
-    print STDERR "Forking initial $count proc\n"
+    say STDERR "Forking initial $count jobs"
     if $verbose;
 
-    # kick off count jobs to begin with, then 
-    # start waiting.
-
-    fork_proc $_ for splice @_, 0, $count;
-
-    my @unused  = ();
+    &fork_job for 1 .. $count;
 
     while( (my $pid = wait) > 0 )
     {
-        my $status  = $?;
-
-        print STDERR "exit: $pid ($status)\n"
+        say STDERR "Complete: $pid ($?)"
         if $verbose;
 
         # this assumes normal *NIX 16-bit exit values,
@@ -132,14 +201,14 @@ sub fork_queue
         #
         # caller can trap the signals.
 
-        if( $status )
+        if( $? )
         {
             # bad news, boss...
 
             my $message
             = do
             {
-                if( my $exit = $status >> 8 )
+                if( my $exit = $? >> 8 )
                 {
                     "exit( $exit ) by $pid"
                 }
@@ -157,7 +226,7 @@ sub fork_queue
 
         # kick off another job if the queue is not empty.
 
-        @_ and fork_proc shift;
+        @_ and &fork_job;
     }
 
     return
@@ -173,15 +242,16 @@ sub runqueue
     looks_like_number $count  
     or croak "Bogus runqueue: '$count' non-numeric";
 
-    $count >= 0
-    or croak "Bogus runqueue: '$count' must be non-negative";
+    $count < 0
+    and croak "Bogus runqueue: negative count ($count)";
 
-    $debug || ! $count
-    ? eval { &run_nofork }
-    : eval { &fork_queue }
+    $fork && $count
+    ? eval { &fork_queue }
+    : eval { &run_nofork }
     ;
 
-    # hand back the unused portion of the queue.
+    # return the unused portion.
+    # this includes any incomplete iterators.
 
     @_
 }
@@ -196,49 +266,80 @@ sub import
 
     shift;
 
-    my $export  = 'runqueue';
+    @_ or unshift @_,  qw( export );
 
-    $debug      = !! $^P;
+    my $export  = 1;
+    my $subname = 'runqueue';
+
+    $fork       = ! $^P;
     $verbose    = '';
     $finish     = '';
 
-    for( @_ )
+    for my $arg ( @_ )
     {
-        my( $name, $arg ) = split /=/, $_;
+        my( $name, $value ) = split /=/, $arg;
 
-        if(     'debug'     eq $name )
+        $value  //= 1;
+
+        $value = ! $value
+        if $name =~ s/^no//;
+
+        given( $name )
         {
-            $debug      = defined $arg ? $arg : 1;
+            when( 'fork' )
+            {
+                $fork       = $value;
+            }
+            when( 'verbose' )
+            {
+                $verbose    = $value;
+            }
+            when( 'finish' )
+            {
+                $finish     = $value;
+            }
+            when( 'debug' )
+            {
+                if( $value )
+                {
+                    $fork       = '';
+                    $verbose    = 1;
+                }
+            }
+            when( 'export' )
+            {
+                $export = !! $value;
+
+                looks_like_number $value 
+                or $subname = $value;
+            }
+
+            warn "Unknown argument: '$arg' ignored";
         }
-        elsif(  'verbose'   eq $name )
-        {
-            $verbose    = defined $arg ? $arg : 1;
-        }
-        elsif(  'finish'    eq $name )
-        {
-            $finish     = defined $arg ? $arg : 1 ;
-        }
-        elsif(  'export'    eq $name )
-        {
-            $export     = $arg;
-        }
-        else
-        {
-            warn "Unknown argument: '$_' ignored";
-        }
+    }
+
+    if( $fork && $^P && ! $DB::fork_TTY )
+    {
+        say STDERR
+        'Debugger forking without $DB::fork_TTY; expect problems';
     }
 
     if( $export )
     {
-        my $ref = qualify_to_ref $export, $caller;
+        my $ref = qualify_to_ref $subname, $caller;
 
-        *$ref   = __PACKAGE__->can( 'runqueue' );
+        undef &{ *$ref };
+
+        *$ref   = \&runqueue
     }
 
     return
 }
 
-*configure  = \&import;
+sub configure
+{
+    @_ and import @_, qw( noexport );
+}
 
 # keep require happy
 
@@ -269,6 +370,19 @@ Parallel::Queue - fork list of subref's N-way parallel
 
     die "Incomplete jobs" if @remaining;
 
+    # an object with method "next_job" will be called
+    # as $iterator->next_job until it returns false. the
+    # return values are dispatched via $sub->(); 
+    # $iter can be an object or class, including 
+    # __PACKAGE__ if the package sets itself up to 
+    # handle the paralell jobs.
+
+    my $iter    = Foo->new( @job_parmz );
+    runqueue 4 => $iter;
+
+    $pkg->configure( @job_parmz );
+    runqueue 8 => $pkg;
+
     # export allows changing the exported sub name.
     # "export=" allows not exporting it (which then
     # requires calling Parallel::Queue::runqueue ...
@@ -277,22 +391,27 @@ Parallel::Queue - fork list of subref's N-way parallel
 
     my @remaining = handle_queue 4, @queue;
 
-    # debug or a zero count (or running with the 
-    # perl debugger) avoid forking. forking in
-    # the debugger can be turned on with an 
-    # explicit debug=0.
+    # "fork" is the normal state.
+    # "nofork" or a zero count avoid forking.
+    # detecting the perl debugger (via $^P) will
+    # defaults "fork" to false ("nofork" mode).
+    # forking in the debugger can be turned on
+    # with an explicit fork (which includs a 
+    # warning for lack of $DB::DEBUG_TTY).
 
     #!/usr/bin/perl -d
 
-    use Parallel::Queue qw( debug=0 );
+    use Parallel::Queue;                # defaults to nofork mode.
+    use Parallel::Queue qw( nofork );   # ditto
 
-    ...
+    use Parallel::Queue qw( fork   );   # forks, even in the debugger.
 
-    # or setting the debug variable to false.
 
-    $Parallel::Queue::debug = '';
+    # "debug" turns on nofork and verbose.
+    # these produce identical results.
 
-    runqueue ....
+    use Parallel::Queue qw( debug );        
+    use Parallel::Queue qw( nofork verbose );
 
     # finish forces execution to continue even if 
     # there is an error in one job. this will finish
@@ -388,7 +507,7 @@ which don't look like numbers.
 
 =item Debugging forks.
 
-<http://qs321.pair.com/~monkads/index.pl?node_id=128283>
+<http://perlmonks.org/index.pl?node_id=128283>
 
 =head1 COPYRIGHT
 
