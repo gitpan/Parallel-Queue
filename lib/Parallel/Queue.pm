@@ -3,7 +3,7 @@
 ########################################################################
 
 package Parallel::Queue;
-use v5.10;
+use v5.12;
 
 use strict;
 
@@ -15,7 +15,7 @@ use Symbol          qw( qualify_to_ref              );
 # package variables
 ########################################################################
 
-our $VERSION    = v3.00;
+our $VERSION    = v3.0.2;
 
 # defaults.
 
@@ -51,7 +51,12 @@ sub next_job
 
         for my $item ( $_[0] )
         {
-            if( $next = eval { $item->can( 'next_job' ) } )
+            if
+            (
+                blessed $item
+                and
+                $next = $item->can( 'next_job' )
+            )
             {
                 say STDERR "New iterator: '$next' ($_[0])"
                 if $verbose;
@@ -370,18 +375,31 @@ Parallel::Queue - fork list of subref's N-way parallel
 
     die "Incomplete jobs" if @remaining;
 
-    # an object with method "next_job" will be called
-    # as $iterator->next_job until it returns false. the
-    # return values are dispatched via $sub->(); 
-    # $iter can be an object or class, including 
-    # __PACKAGE__ if the package sets itself up to 
-    # handle the paralell jobs.
+    # if the next item on the queue can "next_job" 
+    # then the return value will be dispatched 
+    # until the call to next_job returns false.
+    # $iter can be an object or class.
+    #
+    # note that the job is dispatched *after* a
+    # fork, which means that it should extract
+    # any necessary information from control
+    # variables prior to generating the next job.
 
     my $iter    = Foo->new( @job_parmz );
     runqueue 4 => $iter;
 
-    $pkg->configure( @job_parmz );
-    runqueue 8 => $pkg;
+    package Foo;
+
+    my @valz    = ( ... );
+
+    sub next_job
+    { 
+        @valz or return;
+
+        my $next = shift @valz;
+
+        sub { frobnicate $next }
+    }
 
     # export allows changing the exported sub name.
     # "export=" allows not exporting it (which then
@@ -401,11 +419,9 @@ Parallel::Queue - fork list of subref's N-way parallel
 
     #!/usr/bin/perl -d
 
-    use Parallel::Queue;                # defaults to nofork mode.
-    use Parallel::Queue qw( nofork );   # ditto
-
+    use Parallel::Queue;                # fork by default unless $^P.
     use Parallel::Queue qw( fork   );   # forks, even in the debugger.
-
+    use Parallel::Queue qw( nofork );   # don't attempt forks
 
     # "debug" turns on nofork and verbose.
     # these produce identical results.
@@ -469,7 +485,9 @@ The name can be any valid Perl sub name.
 
 Using an empty name avoids exporting anything 
 and requires using the fully qualified subname
-(Parallel::Query::runqueu) to run the queue.
+(Parallel::Query::runqueue) or a subref (via 
+Parallel::Queue->can( 'runqueue' )) to run the
+queue.
 
 =item verbose
 
@@ -505,13 +523,17 @@ which don't look like numbers.
 
 =head1 SEE ALSO
 
+=over 4
+
 =item Debugging forks.
 
 <http://perlmonks.org/index.pl?node_id=128283>
 
+=back
+
 =head1 COPYRIGHT
 
-This code is released under the same terms as Perl-5.8
+This code is released under the same terms as Perl-5.12
 or any later version of Perl.
 
 =head1 AUTHOR
