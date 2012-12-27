@@ -22,4 +22,4 @@ requires:
   Scalar::Util: 0
   Symbol: 0
   strict: 0
-version: 3.00003
+version: v3.0.3

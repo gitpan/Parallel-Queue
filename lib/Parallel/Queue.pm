@@ -15,7 +15,7 @@ use Symbol          qw( qualify_to_ref              );
 # package variables
 ########################################################################
 
-our $VERSION    = v3.0.2;
+our $VERSION    = "v3.0.3";
 
 # defaults.
 
