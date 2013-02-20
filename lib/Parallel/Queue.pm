@@ -15,7 +15,7 @@ use Symbol          qw( qualify_to_ref              );
 # package variables
 ########################################################################
 
-our $VERSION    = "v3.0.3";
+our $VERSION    = "v3.0.4";
 
 # defaults.
 
@@ -267,11 +267,11 @@ sub import
     # with the args. empty arg for 'export' 
     # indicates that runqueue needs to be exported.
 
-    my $caller = caller;
-
     shift;
 
-    @_ or unshift @_,  qw( export );
+    my $caller = caller;
+
+    @_ or @_ = qw( export );
 
     my $export  = 1;
     my $subname = 'runqueue';
@@ -343,7 +343,7 @@ sub import
 
 sub configure
 {
-    @_ and import @_, qw( noexport );
+    @_ and import noexport => @_;
 }
 
 # keep require happy
@@ -415,11 +415,10 @@ Parallel::Queue - fork list of subref's N-way parallel
     # defaults "fork" to false ("nofork" mode).
     # forking in the debugger can be turned on
     # with an explicit fork (which includs a 
-    # warning for lack of $DB::DEBUG_TTY).
-
-    #!/usr/bin/perl -d
+    # warning if $DB::DEBUG_TTY is not set).
 
     use Parallel::Queue;                # fork by default unless $^P.
+
     use Parallel::Queue qw( fork   );   # forks, even in the debugger.
     use Parallel::Queue qw( nofork );   # don't attempt forks
 
@@ -440,7 +439,7 @@ Parallel::Queue - fork list of subref's N-way parallel
     runqueue $nway, @cleanupz;
 
     # "configure" is a more descriptive alias for the
-    # import sub.
+    # import sub that defaults to 'noexport':
 
     Parallel::Queue->configure( debug=0 finish=1 );
 

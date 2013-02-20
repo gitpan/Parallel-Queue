@@ -1,5 +1,10 @@
-Revision history for Perl extension Parallel::Queue.
-Most recent at top.
+
+3.0.4 Tue Feb 19 20:10:07 CST 2013
+
+ - set noexport as default for configure, allowing
+   user override.
+
+ - POD
 
 3.0.2 Wed Dec 26 19:47:21 CST 2012
 
