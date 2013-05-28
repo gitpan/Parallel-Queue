@@ -3,7 +3,7 @@
 ########################################################################
 
 package Parallel::Queue;
-use v5.12;
+use v5.10;
 
 use strict;
 
@@ -15,7 +15,7 @@ use Symbol          qw( qualify_to_ref              );
 # package variables
 ########################################################################
 
-our $VERSION    = "v3.0.4";
+our $VERSION    = v3.1;
 
 # defaults.
 
@@ -267,11 +267,11 @@ sub import
     # with the args. empty arg for 'export' 
     # indicates that runqueue needs to be exported.
 
-    shift;
-
     my $caller = caller;
 
-    @_ or @_ = qw( export );
+    shift;
+
+    @_ or unshift @_,  qw( export );
 
     my $export  = 1;
     my $subname = 'runqueue';
@@ -289,38 +289,35 @@ sub import
         $value = ! $value
         if $name =~ s/^no//;
 
-        given( $name )
+        if( 'fork' eq $name )
         {
-            when( 'fork' )
-            {
-                $fork       = $value;
-            }
-            when( 'verbose' )
-            {
-                $verbose    = $value;
-            }
-            when( 'finish' )
-            {
-                $finish     = $value;
-            }
-            when( 'debug' )
-            {
-                if( $value )
-                {
-                    $fork       = '';
-                    $verbose    = 1;
-                }
-            }
-            when( 'export' )
-            {
-                $export = !! $value;
-
-                looks_like_number $value 
-                or $subname = $value;
-            }
-
-            warn "Unknown argument: '$arg' ignored";
+            $fork       = $value;
         }
+        elsif( 'verbose' eq $name )
+        {
+            $verbose    = $value;
+        }
+        elsif( 'finish' eq $name )
+        {
+            $finish     = $value;
+        }
+        elsif( 'debug' eq $name )
+        {
+            if( $value )
+            {
+                $fork       = '';
+                $verbose    = 1;
+            }
+        }
+        elsif( 'export' eq $name )
+        {
+            $export = !! $value;
+
+            looks_like_number $value 
+            or $subname = $value;
+        }
+
+        warn "Unknown argument: '$arg' ignored";
     }
 
     if( $fork && $^P && ! $DB::fork_TTY )
@@ -343,7 +340,7 @@ sub import
 
 sub configure
 {
-    @_ and import noexport => @_;
+    @_ and import @_, qw( noexport );
 }
 
 # keep require happy
@@ -375,31 +372,18 @@ Parallel::Queue - fork list of subref's N-way parallel
 
     die "Incomplete jobs" if @remaining;
 
-    # if the next item on the queue can "next_job" 
-    # then the return value will be dispatched 
-    # until the call to next_job returns false.
-    # $iter can be an object or class.
-    #
-    # note that the job is dispatched *after* a
-    # fork, which means that it should extract
-    # any necessary information from control
-    # variables prior to generating the next job.
+    # an object with method "next_job" will be called
+    # as $iterator->next_job until it returns false. the
+    # return values are dispatched via $sub->(); 
+    # $iter can be an object or class, including 
+    # __PACKAGE__ if the package sets itself up to 
+    # handle the paralell jobs.
 
     my $iter    = Foo->new( @job_parmz );
     runqueue 4 => $iter;
 
-    package Foo;
-
-    my @valz    = ( ... );
-
-    sub next_job
-    { 
-        @valz or return;
-
-        my $next = shift @valz;
-
-        sub { frobnicate $next }
-    }
+    $pkg->configure( @job_parmz );
+    runqueue 8 => $pkg;
 
     # export allows changing the exported sub name.
     # "export=" allows not exporting it (which then
@@ -415,12 +399,15 @@ Parallel::Queue - fork list of subref's N-way parallel
     # defaults "fork" to false ("nofork" mode).
     # forking in the debugger can be turned on
     # with an explicit fork (which includs a 
-    # warning if $DB::DEBUG_TTY is not set).
+    # warning for lack of $DB::DEBUG_TTY).
 
-    use Parallel::Queue;                # fork by default unless $^P.
+    #!/usr/bin/perl -d
+
+    use Parallel::Queue;                # defaults to nofork mode.
+    use Parallel::Queue qw( nofork );   # ditto
 
     use Parallel::Queue qw( fork   );   # forks, even in the debugger.
-    use Parallel::Queue qw( nofork );   # don't attempt forks
+
 
     # "debug" turns on nofork and verbose.
     # these produce identical results.
@@ -439,7 +426,7 @@ Parallel::Queue - fork list of subref's N-way parallel
     runqueue $nway, @cleanupz;
 
     # "configure" is a more descriptive alias for the
-    # import sub that defaults to 'noexport':
+    # import sub.
 
     Parallel::Queue->configure( debug=0 finish=1 );
 
@@ -484,9 +471,7 @@ The name can be any valid Perl sub name.
 
 Using an empty name avoids exporting anything 
 and requires using the fully qualified subname
-(Parallel::Query::runqueue) or a subref (via 
-Parallel::Queue->can( 'runqueue' )) to run the
-queue.
+(Parallel::Query::runqueu) to run the queue.
 
 =item verbose
 
@@ -522,17 +507,13 @@ which don't look like numbers.
 
 =head1 SEE ALSO
 
-=over 4
-
 =item Debugging forks.
 
 <http://perlmonks.org/index.pl?node_id=128283>
 
-=back
-
 =head1 COPYRIGHT
 
-This code is released under the same terms as Perl-5.12
+This code is released under the same terms as Perl-5.8
 or any later version of Perl.
 
 =head1 AUTHOR
