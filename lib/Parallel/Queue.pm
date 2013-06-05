@@ -316,8 +316,10 @@ sub import
             looks_like_number $value 
             or $subname = $value;
         }
-
-        warn "Unknown argument: '$arg' ignored";
+        else
+        {
+            warn "Unknown argument: '$arg' ignored";
+        }
     }
 
     if( $fork && $^P && ! $DB::fork_TTY )
