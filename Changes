@@ -1,5 +1,10 @@
-Revision history for Perl extension Parallel::Queue.
-Most recent at top.
+3.3 Tue Dec  2 19:15:58 CST 2014
+
+ - POD cleanups
+
+ - Up required version to v5.12.
+ 
+ - Up copyright to perl v5.20.
 
 3.2 Wed Jun  5 07:52:13 CDT 2013
 
@@ -9,7 +14,24 @@ Most recent at top.
 
  - Remove smart matches, given, when.
 
-3.00 Wed Jun  6 06:46:39 CDT 2012
+3.0.4 Tue Feb 19 20:10:07 CST 2013
+
+ - set noexport as default for configure, allowing
+   user override.
+
+ - POD
+
+3.0.2 Wed Dec 26 19:47:21 CST 2012
+
+ - POD errors.
+
+3.0.1 Wed Dec  5 16:24:06 CST 2012
+
+ - use v5.12
+ - Copyright moved to Perl-5.12
+ - POD clenaups
+
+3.0 Wed Jun  6 06:46:39 CDT 2012
 
  - Up version due to changes in interface.
 

@@ -4,7 +4,7 @@
       "Steven Lembark <lembark@wrkhors.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 6.66, CPAN::Meta::Converter version 2.131490",
+   "generated_by" : "ExtUtils::MakeMaker version 6.98, CPAN::Meta::Converter version 2.142690",
    "license" : [
       "unknown"
    ],
@@ -40,5 +40,5 @@
       }
    },
    "release_status" : "stable",
-   "version" : "3.2"
+   "version" : "v3.3.0"
 }

@@ -3,7 +3,7 @@
 ########################################################################
 
 package Parallel::Queue;
-use v5.10;
+use v5.12;
 
 use strict;
 
@@ -15,7 +15,7 @@ use Symbol          qw( qualify_to_ref              );
 # package variables
 ########################################################################
 
-our $VERSION    = v3.1;
+our $VERSION    = v3.3;
 
 # defaults.
 
@@ -381,7 +381,7 @@ Parallel::Queue - fork list of subref's N-way parallel
     # __PACKAGE__ if the package sets itself up to 
     # handle the paralell jobs.
 
-    my $iter    = Foo->new( @job_parmz );
+    my $iter   = Foo->new( @job_parmz );
     runqueue 4 => $iter;
 
     $pkg->configure( @job_parmz );
@@ -448,15 +448,13 @@ subroune into the caller.
 
 =over 4
 
-=item finish
-=item finish=0
+=item finish (default finish=0)
 
 This causes the queue to finsih even if there are
 non-zero exits on the way. Exits will be logged 
 but will not stop the queue. 
 
-=item export=my_name
-=item export=
+=item export=my_name (default export=runqueue)
 
 By default Parallel::Queue exports "runqueue", this can
 be changed with the "export" arguments. In this case
@@ -515,7 +513,7 @@ which don't look like numbers.
 
 =head1 COPYRIGHT
 
-This code is released under the same terms as Perl-5.8
+This code is released under the same terms as Perl-5.20
 or any later version of Perl.
 
 =head1 AUTHOR

@@ -7,7 +7,7 @@ WriteMakefile
     NAME            => 'Parallel::Queue',
     AUTHOR          => 'Steven Lembark <lembark@wrkhors.com>',
 
-    VERSION         => '3.2',
+    VERSION_FROM    => 'lib/Parallel/Queue.pm',
     ABSTRACT_FROM   => 'lib/Parallel/Queue.pm',
 
 	PREREQ_PM =>
